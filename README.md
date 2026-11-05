@@ -2,66 +2,87 @@
 
 ## Overview
 
-This project documents the design, configuration, and troubleshooting of a multi-network home lab environment.
+This project documents the design, implementation, and troubleshooting of a multi-network home lab environment.
 
-The objective is to establish connectivity between multiple isolated network segments using different routers and Linux-based infrastructure.
+The objective is to connect multiple network segments using an ISP-provided Excitel router, a Raspberry Pi gateway, a TP-Link Archer C20 router running OpenWrt, and a Proxmox virtualization server.
 
-The environment consists of an ISP-provided Excitel router, a Raspberry Pi gateway, a TP-Link Archer C20 router running OpenWrt, and several Linux-based home lab machines.
+The project also explores multi-interface connectivity on Linux systems to improve access to home lab resources without repeatedly switching between wireless networks.
 
-An important goal of this project is to make home lab resources accessible across different network segments without requiring users to manually switch between Wi-Fi networks.
+It combines two main objectives:
 
-The project also explores multiple network interfaces, routing behaviour, and connectivity between Proxmox and Linux client machines.
+1. Establish connectivity between the Excitel network, Raspberry Pi gateway, and Archer C20 home lab network.
+2. Enable access to Proxmox and other home lab devices through multiple network interfaces.
+
+This is a practical networking project involving IP addressing, routing, DHCP, wireless connectivity, and Linux network troubleshooting.
 
 ## Project Objectives
 
-- Establish multiple independent home network segments.
-- Connect downstream networks through a Raspberry Pi gateway.
-- Configure a TP-Link Archer C20 router with OpenWrt.
-- Understand routing between different private IP subnets.
-- Enable access to home lab machines across network segments.
-- Reduce the need to switch Wi-Fi networks when accessing Proxmox.
-- Experiment with multiple network interfaces on Linux machines.
-- Diagnose connectivity, routing, and packet-loss issues.
+- Connect multiple independent private network segments.
+- Use Raspberry Pi as an intermediary gateway.
+- Configure TP-Link Archer C20 with OpenWrt.
+- Establish a dedicated network between the Raspberry Pi and Archer C20.
+- Provide a separate LAN for home lab devices.
+- Enable multiple network connections on Proxmox.
+- Improve access to Proxmox from different network segments.
+- Investigate Linux routing and network interface metrics.
+- Improve local file-transfer connectivity.
+- Reduce the need to switch wireless networks when accessing home lab resources.
+
+## Hardware and Software
+
+| Component | Hardware / Software |
+|---|---|
+| ISP Router | Excitel-provided router |
+| Gateway | Raspberry Pi |
+| Downstream Router | TP-Link Archer C20 v4 |
+| Router Firmware | OpenWrt 19.07.10 |
+| Virtualization Server | Proxmox VE |
+| Client Laptop | Lenovo ThinkPad T480 |
+| Gateway OS | Raspberry Pi OS |
+| Proxmox OS | Proxmox VE |
+| Client OS | Linux Mint |
+| Network Services | DHCP, DNS, IP Routing |
 
 ## Network Architecture
 
-The home lab uses three primary network segments.
+The environment contains three primary network segments.
 
-### 1. Upstream Network – Excitel
+### 1. Excitel Network
 
 The Excitel router provides the primary internet connection.
 
-| Component | Configuration |
+| Parameter | Configuration |
 |---|---|
-| Router | Excitel ISP router |
 | Network | 192.168.1.0/24 |
 | Raspberry Pi interface | eth0 |
-| Raspberry Pi address | DHCP assigned |
+| Raspberry Pi IP | 192.168.1.4 |
+| Proxmox interface | wlp3s0 |
+| Proxmox IP | 192.168.1.91 |
 
-### 2. Gateway Network – Raspberry Pi
+### 2. Raspberry Pi Gateway Network
 
-The Raspberry Pi acts as an intermediary between the upstream network and the downstream Archer C20 router.
+The Raspberry Pi connects the upstream network to the downstream Archer C20 router.
 
-| Component | Configuration |
+| Parameter | Configuration |
 |---|---|
 | Device | Raspberry Pi |
 | Interface | eth1 |
 | IP address | 192.168.50.1/24 |
 | DHCP service | dnsmasq |
-| Downstream router | TP-Link Archer C20 |
+| Connected router | Archer C20 WAN |
 
-### 3. Home Lab Network – Archer C20
+### 3. Archer C20 Home Lab Network
 
-The Archer C20 operates using OpenWrt firmware and provides connectivity to downstream wireless clients.
+The Archer C20 provides a separate wireless LAN for home lab clients.
 
-| Component | Configuration |
+| Parameter | Configuration |
 |---|---|
-| Router | TP-Link Archer C20 v4 |
+| Device | TP-Link Archer C20 v4 |
 | Firmware | OpenWrt 19.07.10 |
-| Router LAN address | 192.168.60.1 |
-| LAN network | 192.168.60.0/24 |
+| WAN IP | 192.168.50.13 |
+| LAN IP | 192.168.60.1 |
+| LAN subnet | 192.168.60.0/24 |
 | DHCP range | 192.168.60.100–192.168.60.199 |
-| WAN address | 192.168.50.13 |
 | Wireless bands | 2.4 GHz and 5 GHz |
 
 ## Network Topology
@@ -70,103 +91,102 @@ The Archer C20 operates using OpenWrt firmware and provides connectivity to down
 flowchart TD
     A[Internet] --> B[Excitel Router]
     B --> C[192.168.1.0/24]
-    C --> D[Raspberry Pi Gateway]
-    D --> E[192.168.50.0/24]
-    E --> F[Archer C20 - OpenWrt]
-    F --> G[192.168.60.0/24]
+    
+    C --> D[Raspberry Pi]
+    D --> E[eth0: Upstream]
+    D --> F[eth1: 192.168.50.1]
+    
+    F --> G[192.168.50.0/24]
+    G --> H[Archer C20 WAN: 192.168.50.13]
+    
+    H --> I[Archer C20 OpenWrt]
+    I --> J[LAN: 192.168.60.0/24]
+    
+    J --> K[Linux Mint Laptop]
+    J --> L[Proxmox USB Wi-Fi]
+    L --> M[Proxmox Server]
+    M --> N[Ubuntu Virtual Machines]
 
-    G --> H[Linux Mint Laptop]
-    G --> I[Proxmox Server]
-    G --> J[Other Home Lab Clients]
-
-    I --> K[Ubuntu Virtual Machines]
+    C --> O[Proxmox Built-in Wi-Fi]
 ```
 
-## Network Configuration
+The Proxmox server has two wireless interfaces that were tested for connectivity to both networks.
 
-### Raspberry Pi Gateway
+## Raspberry Pi Gateway Configuration
 
-The Raspberry Pi uses separate network interfaces for upstream and downstream connectivity.
+The Raspberry Pi uses separate Ethernet interfaces for upstream and downstream connectivity.
 
-The relevant interface roles are:
+| Interface | Purpose | Address |
+|---|---|---|
+| eth0 | Upstream Excitel connection | DHCP assigned |
+| eth1 | Downstream Archer connection | 192.168.50.1/24 |
 
-| Interface | Role |
-|---|---|
-| eth0 | Upstream connection to Excitel |
-| eth1 | Downstream connection to Archer C20 |
-| wlan0 | Additional wireless connectivity |
-
-The downstream Ethernet interface uses a static address:
+The downstream Ethernet interface is configured with a static IP address.
 
 ```text
 192.168.50.1/24
 ```
 
-The Raspberry Pi also uses dnsmasq for DHCP services on the downstream gateway network.
+dnsmasq is used for DHCP services on the downstream network.
 
-### Archer C20 – OpenWrt
+The Raspberry Pi gateway is also used in a separate VPN gateway project. VPN routing and firewall configurations are documented separately.
 
-The TP-Link Archer C20 v4 was configured with OpenWrt firmware.
+## Archer C20 OpenWrt Configuration
 
-The WAN interface connects to the Raspberry Pi gateway network.
+The TP-Link Archer C20 v4 was configured with OpenWrt 19.07.10.
 
-The LAN interface provides a separate subnet for home lab devices.
+The router connects to the Raspberry Pi through its WAN interface and provides a separate LAN for home lab clients.
 
-The router provides wireless connectivity through two SSIDs:
+### WAN Configuration
+
+```text
+WAN Network: 192.168.50.0/24
+WAN Address: 192.168.50.13
+Upstream Gateway: Raspberry Pi
+```
+
+### LAN Configuration
+
+```text
+LAN Address: 192.168.60.1
+Subnet: 192.168.60.0/24
+DHCP Start: 192.168.60.100
+DHCP End: 192.168.60.199
+```
+
+### Wireless Configuration
+
+Two wireless networks were configured:
 
 - C20-Open-2.4G
 - C20-Open-5G
 
-The objective is to keep devices connected to the Archer C20 within the dedicated home lab subnet while using the Raspberry Pi as the upstream gateway.
+Both bands provide wireless access to the home lab network.
 
 ## Proxmox Multi-network Connectivity
 
-An additional part of this project involved improving access to the Proxmox server.
+One of the important parts of this project was improving connectivity to the Proxmox server.
 
-The Proxmox host originally used its built-in wireless interface to connect to the Excitel network.
+Initially, Proxmox was connected to the Excitel network using its built-in wireless adapter.
 
-A USB Wi-Fi adapter was also introduced to connect the machine to the Archer C20 network.
+To provide an additional connection to the Archer C20 network, a USB Wi-Fi adapter was introduced.
 
-The interfaces tested included:
+### Network Interfaces
 
-| Interface | Purpose |
-|---|---|
-| wlp3s0 | Built-in Wi-Fi – Excitel network |
-| wlx3460f935e220 | USB Wi-Fi adapter – Archer C20 network |
+| Interface | Purpose | Network |
+|---|---|---|
+| wlp3s0 | Built-in Wi-Fi | Excitel |
+| wlx3460f935e220 | USB Wi-Fi | Archer C20 |
 
-The USB Wi-Fi interface was tested with a dedicated network address in the Archer C20 subnet.
+The USB Wi-Fi adapter was configured and tested against the Archer C20 network.
 
-This allowed direct connectivity testing between Proxmox and other devices connected to the Archer C20.
+The Proxmox server was assigned an address in the Archer C20 subnet during testing.
 
-## Connectivity and Routing Troubleshooting
+This setup allowed the server to maintain connectivity through its original wireless interface while testing a second connection to the home lab network.
 
-During implementation, several network-related problems were investigated.
+### Connectivity Testing
 
-### 1. Different Network Segments
-
-Devices connected to the Excitel router and Archer C20 were operating in different IP subnets.
-
-The objective was to provide access to required home lab services without manually changing Wi-Fi connections.
-
-### 2. Linux Routing Behaviour
-
-The Proxmox server had multiple network interfaces.
-
-Linux route selection and interface metrics affected which network interface was used for outgoing traffic.
-
-Interface-specific connectivity tests were performed to identify routing issues.
-
-Example:
-
-```bash
-ip addr
-ip route
-ip rule
-```
-
-### 3. Interface-specific Connectivity Testing
-
-The USB Wi-Fi adapter was tested independently.
+The Archer C20 gateway was tested through the USB wireless interface.
 
 Example:
 
@@ -174,124 +194,138 @@ Example:
 ping -I wlx3460f935e220 192.168.60.1
 ```
 
-This was used to verify that the USB Wi-Fi interface could communicate with the Archer C20 router.
+The test successfully established connectivity with the Archer C20 gateway.
 
-### 4. Wi-Fi Signal and Packet Loss
+The Proxmox server and Linux Mint laptop were also tested for direct connectivity through the Archer C20 network.
 
-Signal strength and connectivity were investigated on both built-in and USB wireless interfaces.
+Some connectivity problems were observed initially and were investigated after restarting the Proxmox server.
 
-Useful diagnostic commands:
+The setup demonstrated that multiple wireless interfaces could be used to connect the Proxmox host to separate network segments.
 
-```bash
-iw dev
-```
+## Linux Network Routing and Troubleshooting
 
-```bash
-iwconfig
-```
+Multiple network interfaces introduce additional routing considerations.
 
-```bash
-ip link
-```
+During implementation, Linux route selection and interface metrics were investigated to understand which interface was being used for outgoing traffic.
 
-Connectivity was tested using:
+### Useful Diagnostic Commands
 
-```bash
-ping -c 10 192.168.60.1
-```
-
-### 5. Network Restart and Connectivity Recovery
-
-Connectivity between Proxmox and the Linux Mint client was also tested after network interface changes and a Proxmox restart.
-
-The troubleshooting helped identify problems related to interface state, routing, and connectivity recovery.
-
-## Useful Linux Networking Commands
-
-### Check Network Interfaces
+**1. List network interfaces**
 
 ```bash
 ip addr show
 ```
 
-### Check Routing Table
+**2. Check routing table**
 
 ```bash
 ip route show
 ```
 
-### Check Routing Rules
+**3. Check routing rules**
 
 ```bash
 ip rule show
 ```
 
-### Check Default Gateway
+**4. Identify route selection**
 
 ```bash
 ip route get 8.8.8.8
 ```
 
-### Test a Specific Network Interface
+**5. Test a specific interface**
 
 ```bash
 ping -I <interface-name> <destination-ip>
 ```
 
-### Test Network Connectivity
+**6. Check wireless connection**
 
 ```bash
-ping <destination-ip>
+iw dev
 ```
 
-### Check Wi-Fi Signal Information
+**7. Check wireless signal**
 
 ```bash
 iw dev <interface-name> link
 ```
 
-## Results and Current State
+**8. Check interface status**
 
-The following areas have been configured or tested:
+```bash
+ip link show
+```
 
-- Raspberry Pi gateway with separate upstream and downstream interfaces.
-- Dedicated network segment between the Raspberry Pi and Archer C20.
-- Archer C20 running OpenWrt.
-- Separate home lab LAN subnet.
-- DHCP configuration on the downstream network.
-- Proxmox connectivity through the Archer C20.
-- USB Wi-Fi adapter connectivity testing.
-- Investigation of multi-interface routing and network metrics.
-- Connectivity testing between Proxmox and Linux Mint.
+## Local Network Performance Investigation
 
-Some aspects of seamless inter-subnet routing and automatic interface selection still require additional validation.
+Another objective was to improve file-transfer performance between Linux Mint and Proxmox.
+
+The investigation included:
+
+- Checking wireless signal strength.
+- Testing connectivity through the Archer C20.
+- Comparing built-in and USB Wi-Fi interfaces.
+- Investigating packet loss.
+- Checking interface-specific routing.
+- Testing connectivity after restarting network services and Proxmox.
+
+The goal is to improve communication between home lab devices without requiring manual network switching.
+
+Performance optimization and long-term routing stability remain areas for further testing.
+
+## Implementation Results
+
+The following configurations and tests have been completed:
+
+| Component | Result |
+|---|---|
+| Raspberry Pi upstream connection | Configured |
+| Raspberry Pi downstream interface | Configured |
+| Raspberry Pi DHCP service | Configured |
+| Archer C20 OpenWrt | Configured |
+| Archer C20 WAN connectivity to Pi | Established |
+| Archer C20 LAN subnet | Configured |
+| Wireless connectivity | Tested |
+| Proxmox built-in Wi-Fi | Operational |
+| Proxmox USB Wi-Fi | Connected and tested |
+| Connectivity to Archer gateway via USB Wi-Fi | Successfully tested |
+| Proxmox and Linux Mint connectivity | Tested |
+| Multi-interface routing | Investigated |
+| Local file-transfer optimization | Further testing required |
+
+The above results describe the tested lab configuration. They do not imply that all devices have unrestricted, persistent connectivity across every subnet.
+
+## Future Improvements
+
+- Validate persistent routing between the three network segments.
+- Configure predictable interface-specific routing.
+- Improve seamless access to Proxmox from the primary network.
+- Optimize local file-transfer performance.
+- Investigate wireless packet loss and signal quality.
+- Implement automated network recovery.
+- Evaluate whether static routing or other network architecture changes are needed.
+- Integrate network status checks into the Home Lab Monitoring Dashboard.
+- Document end-to-end connectivity tests.
 
 ## Security Considerations
 
 This repository is intended for public GitHub publication.
 
-Do not commit:
+Before publishing configuration files and scripts, remove:
 
-- Actual Wi-Fi passwords.
 - Router administrator credentials.
-- VPN private keys.
+- Wi-Fi passwords.
 - ISP account information.
 - SSH private keys.
-- Sensitive firewall configurations.
-- Unnecessary device identifiers or personal network information.
+- VPN private keys and credentials.
+- Authentication tokens.
+- Public IP addresses associated with the home connection.
 
-Private IP ranges in this documentation are included to explain the architecture. Actual device-specific configurations should be reviewed and sanitized before publication.
+Private IP addresses in this README are used to explain the lab architecture. They can be changed to documentation-only example ranges if desired.
 
-## Future Improvements
-
-- Implement predictable routing between required network segments.
-- Configure and validate persistent route policies.
-- Improve seamless access to Proxmox from the primary network.
-- Optimize local file-transfer performance.
-- Improve wireless connectivity and reduce packet loss.
-- Configure automatic interface failover where appropriate.
-- Add network monitoring to the home lab dashboard.
-- Document network recovery and troubleshooting procedures.
+Do not publish complete router backups or unreviewed firewall configuration files.
 
 ## Suggested Repository Structure
 
@@ -303,6 +337,9 @@ home-lab-network-connectivity/
 ├── documentation/
 │   ├── network-architecture.md
 │   ├── ip-addressing.md
+│   ├── raspberry-pi-gateway.md
+│   ├── openwrt-router.md
+│   ├── proxmox-connectivity.md
 │   ├── routing.md
 │   └── troubleshooting.md
 │
@@ -318,23 +355,25 @@ home-lab-network-connectivity/
 
 ## Learning Outcomes
 
-This project demonstrates hands-on experience with:
+This project provides hands-on experience with:
 
-- Linux networking.
 - Multi-subnet network architecture.
-- Network routing and interface metrics.
+- Linux network administration.
+- IP addressing and routing.
+- DHCP and DNS services.
 - Raspberry Pi gateway configuration.
 - OpenWrt router administration.
-- DHCP and IP addressing.
-- Multi-interface connectivity.
-- Proxmox network configuration.
-- Wireless network troubleshooting.
+- Multiple wireless interfaces.
+- Proxmox networking.
+- Linux routing tables and interface metrics.
+- Network connectivity troubleshooting.
+- Home lab infrastructure design.
 
 ## Disclaimer
 
 This is a personal home lab project intended for learning, experimentation, and research.
 
-Configurations and network topology may evolve as additional devices and services are integrated.
+The configuration is based on a privately maintained home network. Hardware, firmware, and network topology may change over time.
 
 ## Author
 
